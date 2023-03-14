@@ -110,24 +110,17 @@ class SsrfFilter
       ::SsrfFilter::Patch::Resolv.apply!
 
       original_url = url
-      scheme_whitelist = options[:scheme_whitelist] || DEFAULT_SCHEME_WHITELIST
-      resolver = options[:resolver] || DEFAULT_RESOLVER
       max_redirects = options[:max_redirects] || DEFAULT_MAX_REDIRECTS
       url = url.to_s
 
       (max_redirects + 1).times do
         uri = URI(url)
 
-        unless scheme_whitelist.include?(uri.scheme)
-          raise InvalidUriScheme, "URI scheme '#{uri.scheme}' not in whitelist: #{scheme_whitelist}"
-        end
+        public_addresses = get_public_ip_addresses(uri, resolver: options[:resolver],
+                                                        scheme_whitelist: options[:scheme_whitelist],
+                                                        raise_expection: true)
 
-        hostname = uri.hostname
-        ip_addresses = resolver.call(hostname)
-        raise UnresolvedHostname, "Could not resolve hostname '#{hostname}'" if ip_addresses.empty?
-
-        public_addresses = ip_addresses.reject(&method(:unsafe_ip_address?))
-        raise PrivateIPAddress, "Hostname '#{hostname}' has no public ip addresses" if public_addresses.empty?
+        raise PrivateIPAddress, "Hostname '#{uri.hostname}' has no public ip addresses" if public_addresses.empty?
 
         response, url = fetch_once(uri, public_addresses.sample.to_s, method, options, &block)
         return response if url.nil?
@@ -136,6 +129,35 @@ class SsrfFilter
       raise TooManyRedirects, "Got #{max_redirects} redirects fetching #{original_url}"
     end
   end
+
+  def self.unsafe_url?(url)
+    uri = URI(url)
+
+    get_public_ip_addresses(uri).empty?
+  end
+
+  def self.get_public_ip_addresses(uri, resolver: nil, scheme_whitelist: nil, raise_expection: false)
+    scheme_whitelist ||= DEFAULT_SCHEME_WHITELIST
+    resolver ||= DEFAULT_RESOLVER
+
+    unless scheme_whitelist.include?(uri.scheme)
+      raise InvalidUriScheme, "URI scheme '#{uri.scheme}' not in whitelist: #{scheme_whitelist}" if raise_expection
+
+      return []
+    end
+
+    hostname = uri.hostname
+    ip_addresses = resolver.call(hostname)
+
+    if ip_addresses.empty?
+      raise UnresolvedHostname, "Could not resolve hostname '#{hostname}'" if raise_expection
+
+      return []
+    end
+
+    ip_addresses.reject(&method(:unsafe_ip_address?))
+  end
+  private_class_method :get_public_ip_addresses
 
   def self.unsafe_ip_address?(ip_address)
     return true if ipaddr_has_mask?(ip_address)
@@ -148,6 +170,8 @@ class SsrfFilter
   private_class_method :unsafe_ip_address?
 
   def self.ipaddr_has_mask?(ipaddr)
+    return true unless ipaddr
+
     range = ipaddr.to_range
     range.first != range.last
   end
