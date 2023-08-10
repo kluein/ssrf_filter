@@ -1,3 +1,6 @@
+### 1.1.2 (8/8/2023)
+* Uses `Addressable::URI` to parse URLs instead of `URI` ([heri](https://github.com/kluein/ssrf_filter/pull/2))
+
 ### 1.1.1 (8/31/2022)
 * Fix network connection errors if you were making https requests while using [net-http](https://github.com/ruby/net-http) 2.2 or higher ([arkadiyt](https://github.com/arkadiyt/ssrf_filter/pull/54))
 

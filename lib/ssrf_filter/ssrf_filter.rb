@@ -131,7 +131,7 @@ class SsrfFilter
   end
 
   def self.unsafe_url?(url)
-    uri = URI(url)
+    uri = Addressable::URI.parse(url)
 
     get_public_ip_addresses(uri).empty?
   end
